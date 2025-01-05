@@ -1,0 +1,117 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.17;
+
+interface IOracle {
+    function getExchangeRate(string memory fromCurrency, string memory toCurrency) external view returns (uint256);
+}
+
+contract InterstellarCurrencyExchange {
+    address public admin;
+    IOracle public oracle;
+
+    // Event untuk logging transaksi konversi
+    event CurrencyConverted(
+        address indexed user,
+        string fromCurrency,
+        string toCurrency,
+        uint256 inputAmount,
+        uint256 outputAmount,
+        uint256 rate
+    );
+
+    // Struktur data untuk menyimpan log konversi
+    struct ConversionLog {
+        address user;
+        string fromCurrency;
+        string toCurrency;
+        uint256 inputAmount;
+        uint256 outputAmount;
+        uint256 timestamp;
+    }
+
+    // Array log konversi
+    ConversionLog[] public conversionLogs;
+
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Only admin can execute this function");
+        _;
+    }
+
+    constructor(address _oracleAddress) {
+        admin = msg.sender;
+        oracle = IOracle(_oracleAddress);
+    }
+
+    /**
+     * @dev Fungsi untuk mengatur alamat oracle baru
+     */
+    function setOracle(address _oracleAddress) external onlyAdmin {
+        oracle = IOracle(_oracleAddress);
+    }
+
+    /**
+     * @dev Fungsi untuk melakukan konversi mata uang
+     * @param fromCurrency Mata uang asal
+     * @param toCurrency Mata uang tujuan
+     * @param inputAmount Jumlah mata uang asal yang akan dikonversi
+     * @return outputAmount Jumlah mata uang tujuan yang dihasilkan
+     */
+    function convertCurrency(
+        string memory fromCurrency,
+        string memory toCurrency,
+        uint256 inputAmount
+    ) external returns (uint256 outputAmount) {
+        require(inputAmount > 0, "Input amount must be greater than 0");
+
+        // Ambil nilai tukar dari oracle
+        uint256 exchangeRate = oracle.getExchangeRate(fromCurrency, toCurrency);
+        require(exchangeRate > 0, "Exchange rate must be greater than 0");
+
+        // Hitung jumlah mata uang tujuan
+        outputAmount = (inputAmount * exchangeRate) / 1e18;
+
+        // Simpan log konversi
+        conversionLogs.push(
+            ConversionLog({
+                user: msg.sender,
+                fromCurrency: fromCurrency,
+                toCurrency: toCurrency,
+                inputAmount: inputAmount,
+                outputAmount: outputAmount,
+                timestamp: block.timestamp
+            })
+        );
+
+        // Emit event untuk logging
+        emit CurrencyConverted(msg.sender, fromCurrency, toCurrency, inputAmount, outputAmount, exchangeRate);
+
+        return outputAmount;
+    }
+
+    /**
+     * @dev Fungsi untuk mengambil log konversi terakhir
+     * @return logData Data log terakhir
+     */
+    function getLastConversion() external view returns (ConversionLog memory logData) {
+        require(conversionLogs.length > 0, "No conversions found");
+        return conversionLogs[conversionLogs.length - 1];
+    }
+
+    /**
+     * @dev Fungsi untuk mendapatkan jumlah total log konversi
+     * @return count Jumlah log konversi
+     */
+    function getConversionLogCount() external view returns (uint256 count) {
+        return conversionLogs.length;
+    }
+
+    /**
+     * @dev Fungsi untuk mengambil log konversi berdasarkan indeks
+     * @param index Indeks log yang ingin diambil
+     * @return logData Data log berdasarkan indeks
+     */
+    function getConversionLogByIndex(uint256 index) external view returns (ConversionLog memory logData) {
+        require(index < conversionLogs.length, "Invalid index");
+        return conversionLogs[index];
+    }
+}
